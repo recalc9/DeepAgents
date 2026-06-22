@@ -1,0 +1,11 @@
+Third-Party Software Notices
+This project is licensed under Apache License 2.0.
+This software includes open source components with the following licenses:
+
+- MIT
+- ISC
+- BSD-2-Clause
+- BSD-3-Clause
+- Apache-2.0
+
+Full license text of each dependency can be found in node_modules/[package]/LICENSE
