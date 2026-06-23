@@ -8,15 +8,16 @@ dotenv.config();
 // 3. 导入所需模块
 import { run ,setTracingDisabled} from '@openai/agents';
 import {initDeepSeek} from "./clients/deepseek.client.js";
-import {createHistoryAgent} from "./agents/index.js";
+import {createTriageAgent} from "./agents/index.js";
 setTracingDisabled(true);
 // 初始化 DeepSeek 客户端
 initDeepSeek();
-// 创建历史问答 Agent
-const historyAgent = createHistoryAgent();
+// 创建 Agents
+const triageAgent = createTriageAgent();
+
 // 测试运行
 async function main() {
-    const result = await run(historyAgent, 'What is the capital of France?');
+    const result = await run(triageAgent, '你能做什么？');
     console.log(result.finalOutput);
 }
 // 运行主函数
