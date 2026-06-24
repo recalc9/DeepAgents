@@ -1,19 +1,39 @@
 import {Agent} from "@openai/agents";
 import {container} from "../core/container.js";
-import type {AppContext,RawTriageAgent} from "../core/agent-context.js"
+import type {AppContext} from "../core/agent-context.js"
+import {asHandoff} from "../core/handoff-helper.js"
+import {createCodeAgent,createDBAgent,createGeneralAgent,createSearchAgent} from "../agents/index.js";
 
-export function createTriageAgent(): RawTriageAgent {
+export function createTriageAgent(): Agent {
   const model = container.getDeepSeekModel();
-  // 这里不写 <xx,xx> 泛型，不会触发 AgentOutputType 报错
+  
+  const code = createCodeAgent();
+  const db = createDBAgent();
+  const general = createGeneralAgent();
+  const search = createSearchAgent();
+
   return Agent.create({
     name: "Triage Agent",
     model,
-    instructions: `任务总调度：
-1. 代码开发 → Code
-2. 联网查文档 → Search
-3. SQL数据库设计 → DB
-4. 闲聊常识 → General
-各专家无法处理时，引导用户回到总调度重新提问`,
-    handoffs: []
+    instructions: `你是智能任务分发器。根据用户意图精准路由到对应专家：
+
+        ## 路由规则
+        - 编程、代码审查、文件读写 → code_agent
+        - 数据库查询、SQL、数据分析 → db_agent  
+        - 实时信息、新闻、外部知识检索 → search_agent
+        
+        ## 兜底处理（General 能力）
+        如果以上都不匹配，你直接以友好、专业的方式回答用户的通用问题。
+        不要将通用闲聊路由给任何专家。
+
+        ## 注意事项
+        - 每次只路由到一个最匹配的专家
+        - 如果意图模糊，优先追问澄清而非猜测路由`,
+    handoffs: [
+      asHandoff(code),
+      asHandoff(db),
+      asHandoff(general),
+      asHandoff(search),
+    ]
   });
 }

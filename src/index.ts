@@ -8,15 +8,14 @@ dotenv.config();
 // 3. 导入所需模块
 import { run ,setTracingDisabled} from '@openai/agents';
 import {initDeepSeek} from "./clients/deepseek.client.js";
+import {createTriageAgent} from "./agents/index.js"
 // 改为从 bootstrap 获取完整绑定好 handoffs 的分诊实例
-import { getRootTriage ,setupAgents} from "./bootstrap.js";
 // 导入上下文类型
 import type { AppContext } from "./core/agent-context.js";
 setTracingDisabled(true);
 // 初始化 DeepSeek 客户端
 initDeepSeek();
-
-setupAgents(); // 初始化所有子Agent并绑定handoffs
+ // 初始化所有子Agent并绑定handoffs
 // 构造测试用上下文（完整满足 AppContext 接口，补齐所有方法）
 function buildTestContext(): AppContext {
   return {
@@ -37,7 +36,7 @@ function buildTestContext(): AppContext {
 // 测试运行
 async function main() {
   // 获取已经绑定所有子Agent的完整分诊
-  const triageAgent = getRootTriage();
+  const triageAgent = createTriageAgent();
   const ctx = buildTestContext();
 
   // run 必须传入第三个参数 { context }，泛型指定上下文 AppContext
