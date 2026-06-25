@@ -11,13 +11,14 @@ const TICK_MS = 80;
 export function createSpinner(text: string) {
   let frameIdx = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
+  let currentText = text;
 
   return {
     start() {
       frameIdx = 0;
       timer = setInterval(() => {
         const frame = BRAILLE[frameIdx % BRAILLE.length]!;
-        process.stderr.write(`\r\x1b[K${frame} ${text}`);
+        process.stderr.write(`\r\x1b[K${frame} ${currentText}`);
         frameIdx++;
       }, TICK_MS);
     },
@@ -26,8 +27,10 @@ export function createSpinner(text: string) {
         clearInterval(timer);
         timer = null;
       }
-      // 清空当前行
       process.stderr.write(`\r\x1b[K`);
+    },
+    update(newText: string) {
+      currentText = newText;
     },
   };
 }

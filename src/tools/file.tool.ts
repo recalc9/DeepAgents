@@ -1,6 +1,7 @@
 import { tool } from '@openai/agents';
 import { z } from 'zod';
 import type { AppContext } from '../core/agent-context';
+import { formatError } from '../core/agent-helpers.js';
 
 /**
  * 安全路径解析辅助函数
@@ -43,8 +44,7 @@ export const fileReadTool = tool({
       return content;
     } catch (err) {
       // 将技术异常翻译为 LLM 可理解的语义化错误
-      const msg = err instanceof Error ? err.message : String(err);
-      return `[ERROR] Failed to read "${path}": ${msg}`;
+      return `[ERROR] Failed to read "${path}": ${formatError(err)}`;
     }
   },
 });
@@ -68,10 +68,7 @@ export const fileWriteTool = tool({
       await ctx.writeFile(safePath, content);
       return `[SUCCESS] Written ${content.length} chars to "${safePath}"`;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return `[ERROR] Failed to write "${path}": ${msg}`;
+      return `[ERROR] Failed to write "${path}": ${formatError(err)}`;
     }
   },
 });
-
-export const fileTools = [fileReadTool, fileWriteTool];

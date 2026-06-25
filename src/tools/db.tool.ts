@@ -1,13 +1,10 @@
 /**
- * 数据库工具 — sql_query（只读 SELECT）与 sql_execute（写操作）
- *
- * 安全设计：
- *   工具层保持薄封装，仅负责参数校验和 LLM 友好错误提示。
- *   真正的 SQL 动词白名单校验在 real-context.ts 的 queryDB/executeSQL 实现中集中管控。
+ * 数据库工具 — sql_query（只读 SELECT）与 sql_execute（写操作，需审批）
  */
 import { tool } from "@openai/agents";
 import { z } from "zod";
 import type { AppContext } from "../core/agent-context.js";
+import { formatError } from "../core/agent-helpers.js";
 
 export const sqlQueryTool = tool({
   name: "sql_query",
@@ -33,8 +30,7 @@ export const sqlQueryTool = tool({
       }
       return JSON.stringify(rows, null, 2);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return `[ERROR] SQL 查询失败: ${msg}`;
+      return `[ERROR] SQL 查询失败: ${formatError(err)}`;
     }
   },
 });
@@ -42,16 +38,18 @@ export const sqlQueryTool = tool({
 export const sqlExecuteTool = tool({
   name: "sql_execute",
   description:
-    "执行写入或 DDL SQL 语句（INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/TRUNCATE）。" +
+    "执行写入 SQL 语句（INSERT/UPDATE/DELETE/CREATE/ALTER）。" +
     "【使用场景】创建表、插入数据、更新记录、删除数据、修改表结构时使用。" +
-    "【注意】此操作不可逆！请在执行前向用户确认，并解释将要执行的操作及其影响。" +
+    "【注意】DROP/TRUNCATE 已被禁止。此操作需要人工确认！" +
     "【限制】每次仅执行一条 SQL。返回受影响的行数。",
   parameters: z.object({
     sql: z
       .string()
       .min(1)
-      .describe("一条完整的 INSERT/UPDATE/DELETE 或 DDL SQL 语句。示例: \"CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)\""),
+      .describe("一条完整的 INSERT/UPDATE/DELETE/CREATE/ALTER SQL 语句。示例: \"CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT)\""),
   }),
+  /** 每次写操作需人工确认 */
+  needsApproval: true,
   execute: async ({ sql }, runContext) => {
     const ctx = runContext?.context as AppContext | undefined;
     if (!ctx) return "[ERROR] AppContext 不可用，无法执行 SQL。";
@@ -60,10 +58,7 @@ export const sqlExecuteTool = tool({
       const result = await ctx.executeSQL(sql);
       return `[OK] SQL 执行成功。受影响行数: ${result.rowCount}`;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return `[ERROR] SQL 执行失败: ${msg}`;
+      return `[ERROR] SQL 执行失败: ${formatError(err)}`;
     }
   },
 });
-
-export const dbTools = [sqlQueryTool, sqlExecuteTool];

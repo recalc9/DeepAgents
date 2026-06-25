@@ -1,7 +1,7 @@
 {
   "name": "deepagent",
   "version": "1.0.0",
-  "description": "",
+  "description": "基于 OpenAI Agents SDK 的多 Agent 编排框架，使用 DeepSeek 作为底层 LLM，采用 AgentHarness 声明式运行时容器",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -10,7 +10,7 @@
     "dev": "tsc && node dist/index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "recalc9 <recalc9@yeah.net>",
   "license": "ISC",
   "type": "module",
   "dependencies": {

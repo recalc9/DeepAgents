@@ -7,7 +7,7 @@
 import pg from "pg";
 import { container } from "../core/container.js";
 
-export function initPostgres(): pg.Pool {
+export function initPostgres(): void {
   const { Pool } = pg;
 
   let pool: pg.Pool;
@@ -47,8 +47,6 @@ export function initPostgres(): pg.Pool {
   // 注册到全局容器
   container.setPgPool(pool);
   console.log(`[initPostgres] 连接池已创建 → ${pool.options.database ?? "(DATABASE_URL)"}`);
-
-  return pool;
 }
 
 /** 优雅关闭连接池 */

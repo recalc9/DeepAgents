@@ -1,84 +1,260 @@
-// src/index.ts
-// 入口文件
-// 1. 禁用 OpenAI Agents 的追踪功能
-// 2. 加载环境变量
+// 入口文件 — DeepAgent REPL
 process.env.OPENAI_AGENTS_DISABLE_TRACING = "1";
-import dotenv from 'dotenv';
-dotenv.config();    
-// 3. 导入所需模块
-import { run ,setTracingDisabled} from '@openai/agents';
-import { initDeepSeek } from "./clients/deepseek.client.js";
-import { initPostgres, shutdownPgPool } from "./clients/postgres.client.js";
-import { createTriageAgent } from "./agents/index.js"
+import * as readline from "node:readline";
+import dotenv from "dotenv";
+dotenv.config();
+
+import { run } from "@openai/agents";
+import type { Agent, RunResult, StreamedRunResult } from "@openai/agents";
+import { bootstrap } from "./bootstrap.js";
+import { AgentRuntime } from "./harness/runtime.js";
 import { buildRealContext } from "./core/real-context.js";
 import { createSpinner } from "./core/spinner.js";
-setTracingDisabled(true);
-// 初始化 DeepSeek 客户端
-initDeepSeek();
-// 初始化 PostgreSQL 连接池
-initPostgres();
+import type { AppContext } from "./core/agent-context.js";
 
-// REPL 交互模式
-import * as readline from "node:readline";
+// ────────── 命令注册表 ──────────
+
+interface RepoCommand {
+  name: string;
+  aliases?: string[];
+  desc: string;
+  sandboxOnly?: boolean;
+  normalOnly?: boolean;
+}
+
+function getCommands(inSandbox: boolean): RepoCommand[] {
+  return [
+    { name: "/help",     aliases: ["/"],  desc: "显示可用命令" },
+    { name: "/exit",     aliases: ["exit", "/quit", "quit"], desc: "退出 REPL" },
+    { name: "/sandbox",  desc: "进入隔离沙盒模式", normalOnly: true },
+    { name: "/exit-sandbox", desc: "退出沙盒（变更丢弃）", sandboxOnly: true },
+    { name: "/mcp",      aliases: ["/mcp list"], desc: "MCP 服务器状态" },
+    { name: "/mcp connect", desc: "连接 MCP 服务器 [/mcp connect <name>]" },
+    { name: "/mcp disconnect", desc: "断开 MCP 服务器 [/mcp disconnect <name>]" },
+  ].filter(c => {
+    if (inSandbox && c.normalOnly) return false;
+    if (!inSandbox && c.sandboxOnly) return false;
+    return true;
+  });
+}
+
+function makeCompleter(inSandbox: () => boolean): readline.Completer {
+  return (line: string) => {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith("/")) return [[], line];
+    const cmds = getCommands(inSandbox());
+    const candidates = cmds.flatMap(c => [c.name, ...(c.aliases ?? [])]);
+    const hits = candidates.filter(c => c.startsWith(trimmed));
+    if (hits.length === 1 && hits[0] === trimmed && !trimmed.endsWith(" ")) {
+      return [[trimmed + " "], line];
+    }
+    return [hits.length ? hits : candidates, line];
+  };
+}
+
+// ────────── 辅助 ──────────
+
+function askLine(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise(resolve => rl.question(prompt, resolve));
+}
+
+/** 流式事件 → spinner 文案 */
+function handleStreamEvent(ev: any, spin: ReturnType<typeof createSpinner>) {
+  if (ev.type === "agent_updated_stream_event") {
+    spin.update(`${ev.agent.name} 正在思考…`);
+  } else if (ev.type === "run_item_stream_event") {
+    const n = ev.name;
+    if (n === "tool_called") spin.update(`正在调用 ${ev.item.rawItem?.name ?? "?"}…`);
+    else if (n === "tool_output") spin.update("处理结果中…");
+    else if (n === "handoff_requested") spin.update("正在切换专家…");
+    else if (n === "handoff_occurred") spin.update("专家已接手…");
+    else if (n === "reasoning_item_created") spin.update("推理中…");
+  }
+}
+
+async function runWithApproval(
+  agent: Agent<AppContext, "text">,
+  input: string,
+  ctx: AppContext,
+  rl: readline.Interface,
+  spin: ReturnType<typeof createSpinner>,
+): Promise<string | null> {
+  try {
+    const streamResult = await run(agent, input, { context: ctx, stream: true }) as StreamedRunResult<AppContext, any>;
+    spin.start();
+
+    for await (const ev of streamResult) handleStreamEvent(ev, spin);
+
+    await streamResult.completed;
+    spin.stop();
+
+    let result = streamResult as unknown as RunResult<AppContext, any>;
+    while (result.interruptions?.length) {
+      for (const item of result.interruptions) {
+        const toolName = item.name ?? "未知工具";
+        const toolArgs = item.arguments ?? "";
+        const preview = toolArgs.length > 200 ? toolArgs.substring(0, 200) + "…" : toolArgs;
+        console.log(`\n⚠️  需要审批: ${toolName}`);
+        console.log(`   参数: ${preview}`);
+
+        const answer = await askLine(rl, "   确认执行? (y/n): ");
+        if (answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes") {
+          result.state.approve(item);
+        } else {
+          result.state.reject(item, { message: "用户拒绝了此操作" });
+        }
+      }
+      spin.start();
+      result = await run(agent, result.state, { context: ctx }) as RunResult<AppContext, any>;
+      spin.stop();
+    }
+
+    return String(result.finalOutput ?? "");
+  } catch (err) {
+    spin.stop();
+    throw err;
+  }
+}
+
+// ────────── REPL ──────────
 
 async function repl() {
-  const triageAgent = createTriageAgent();
-  const ctx = buildRealContext();
+  const runtime = await bootstrap();
 
-  // 创建 readline 接口
+  let ctx = buildRealContext();
+  let inSandbox = false;
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     prompt: "> ",
+    completer: makeCompleter(() => inSandbox),
   });
 
-  // 处理 Ctrl+C
   process.on("SIGINT", async () => {
     console.log("\n正在关闭...");
-    await shutdownPgPool();
+    await runtime.shutdown();
     rl.close();
     process.exit(0);
   });
 
-  console.log("DeepAgent REPL 已启动。输入 /exit 或 /quit 退出，Ctrl+C 也可退出。");
+  console.log("DeepAgent REPL 已启动。输入 / 查看命令，Tab 补全。");
   rl.prompt();
 
-  // 逐行读取用户输入
   for await (const line of rl) {
     const input = line.trim();
-    if (!input) {
+    if (!input) { rl.prompt(); continue; }
+
+    // ── REPL 元命令 ──
+    if (input === "/" || input === "/help") {
+      console.log("");
+      for (const cmd of getCommands(inSandbox)) {
+        const names = [cmd.name, ...(cmd.aliases ?? [])].join(", ");
+        console.log(`  ${names.padEnd(24)} ${cmd.desc}`);
+      }
+      console.log("");
       rl.prompt();
       continue;
     }
 
-    // 退出命令
     if (input === "/exit" || input === "/quit" || input === "exit" || input === "quit") {
       console.log("再见！");
-      await shutdownPgPool();
+      await runtime.shutdown();
       rl.close();
       break;
     }
 
-    // 执行 Agent
+    if (input.startsWith("/sandbox")) {
+      if (inSandbox) { console.log("已在沙盒中，请先 /exit-sandbox"); rl.prompt(); continue; }
+      const label = input.split(/\s+/)[1] || undefined;
+      await runtime.enterSandbox(label);
+      ctx = buildRealContext({ workspaceRoot: runtime.sandboxPath! });
+      inSandbox = true;
+      console.log(`[沙盒模式] ${runtime.sandboxPath}`);
+      console.log("  所有文件操作和 shell 命令在此目录内执行。");
+      rl.prompt();
+      continue;
+    }
+
+    if (input === "/exit-sandbox") {
+      if (!inSandbox) { console.log("当前不在沙盒中。"); rl.prompt(); continue; }
+      await runtime.exitSandbox();
+      ctx = buildRealContext();
+      inSandbox = false;
+      console.log("[已退出沙盒，变更已丢弃]");
+      rl.prompt();
+      continue;
+    }
+
+    // ── MCP 命令 ──
+    if (input === "/mcp" || input === "/mcp list") {
+      console.log("");
+      const status = await runtime.mcpRegistry.listStatus();
+      if (status.length === 0) {
+        console.log("  未配置 MCP 服务器。在 src/config.ts 中 mcpServerConfigs 添加配置。");
+        console.log("  示例：filesystem、puppeteer、github 等 MCP 服务器。");
+      } else {
+        for (const s of status) {
+          const icon = s.connected ? "✓" : "✗";
+          const tools = s.connected ? ` (${s.toolCount} 工具)` : "";
+          const err = s.error.trim() ? ` [错误: ${s.error}]` : "";
+          console.log(`  ${icon} ${s.name} [${s.mode}]${tools}${err}`);
+        }
+      }
+      console.log("");
+      rl.prompt();
+      continue;
+    }
+
+    if (input.startsWith("/mcp connect")) {
+      const name = input.split(/\s+/)[2];
+      try {
+        if (name) {
+          await runtime.mcpRegistry.connectByName(name);
+          console.log(`[MCP] ${name} 已连接`);
+        } else {
+          await runtime.mcpRegistry.connectAuto();
+          console.log("[MCP] 已连接所有 autoConnect 服务器");
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[MCP] 连接失败: ${msg}`);
+      }
+      rl.prompt();
+      continue;
+    }
+
+    if (input.startsWith("/mcp disconnect")) {
+      const name = input.split(/\s+/)[2];
+      if (name) {
+        await runtime.mcpRegistry.disconnectByName(name);
+        console.log(`[MCP] ${name} 已断开`);
+      } else {
+        await runtime.mcpRegistry.disconnectAll();
+        console.log("[MCP] 已断开所有 MCP 服务器");
+      }
+      rl.prompt();
+      continue;
+    }
+
+    // ── 普通 Agent 对话 ──
     const spin = createSpinner("思考中…");
-    spin.start();
-    let startTime = Date.now();
+    const startTime = Date.now();
+
     try {
-      const result = await run(triageAgent, input, { context: ctx });
-      spin.stop();
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(result.finalOutput);
-      console.log(`── ${elapsed}s ──`);
+      const output = await runWithApproval(runtime.rootAgent, input, ctx, rl, spin);
+      if (output !== null) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(output);
+        console.log(`── ${elapsed}s ──`);
+      }
     } catch (err) {
-      spin.stop();
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[ERROR] ${msg}`);
     }
-    console.log(""); // 空行分隔
+    console.log("");
     rl.prompt();
   }
-
 }
 
-// 运行 REPL
 repl().catch(console.error);
