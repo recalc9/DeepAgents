@@ -13,7 +13,7 @@
  *   7. 注入 rootHandoff 到根 Agent
  */
 import { type Agent, handoff } from "@openai/agents";
-import type { OutputGuardrail, Tool } from "@openai/agents";
+import type { OutputGuardrail, Tool, MCPServer } from "@openai/agents";
 import { container } from "../core/container.js";
 import { PromptResolver } from "../core/prompt-resolver.js";
 import { FileSystemService } from "../core/filesystem.js";
@@ -84,9 +84,9 @@ export function assemble(
   }
 
   // ── MCP 服务器索引 ──
-  const mcpServerMap = new Map<string, any>();
+  const mcpServerMap = new Map<string, MCPServer>();
   for (const s of options.mcpServers) {
-    mcpServerMap.set((s as any).name ?? "", s);
+    mcpServerMap.set(s.name, s);
   }
 
   // ── 拓扑排序 + 创建 Agent ──
@@ -131,8 +131,8 @@ export function assemble(
     // Assembler 注入配置元数据（Agent 对象支持这些字段，但 SDK 类型不暴露为构造函数参数）
     if (config.description) agent.handoffDescription = config.description;
     if (config.mcpServers.length > 0) {
-      const servers = config.mcpServers.map(n => mcpServerMap.get(n)).filter(Boolean);
-      if (servers.length > 0) agent.mcpServers = servers as any;
+      const servers = config.mcpServers.map(n => mcpServerMap.get(n)).filter((s): s is MCPServer => s != null);
+      if (servers.length > 0) agent.mcpServers = servers;
     }
     agentMap.set(config.name, agent);
   }

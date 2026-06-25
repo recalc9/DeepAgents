@@ -5,6 +5,8 @@ import type { Agent, Tool, OutputGuardrail, MCPServer } from "@openai/agents";
 import type { OpenAIChatCompletionsModel } from "@openai/agents";
 import type { PromptResolver } from "../core/prompt-resolver.js";
 import type { AppContext } from "../core/agent-context.js";
+import type { Editor } from "@openai/agents";
+import type { Shell } from "@openai/agents";
 
 // ────────── Agent 声明式配置 ──────────
 
@@ -17,7 +19,6 @@ export interface AgentConfig {
   handoffToParents: string[];
   tools: string[];
   guardrails: string[];
-  /** MCP 服务器名称列表 */
   mcpServers: string[];
   asTool?: AgentAsToolConfig;
   rootHandoff?: boolean;
@@ -33,20 +34,10 @@ export interface AgentAsToolConfig {
 
 export interface McpServerConfig {
   name: string;
-  /** stdio 模式：启动本地进程作为 MCP 服务器 */
-  stdio?: {
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-    cwd?: string;
-  };
-  /** HTTP Streamable 模式 */
+  stdio?: { command: string; args?: string[]; env?: Record<string, string>; cwd?: string };
   streamableHttp?: { url: string };
-  /** SSE 模式 */
   sse?: { url: string };
-  /** 启动时自动连接 */
   autoConnect?: boolean;
-  /** 仅沙盒模式下启用 */
   sandboxOnly?: boolean;
 }
 
@@ -67,8 +58,8 @@ export interface ToolConfig {
 }
 
 export interface ToolBuildContext {
-  editor: any;
-  shell: any;
+  editor: Editor;
+  shell: Shell | undefined;
   workspaceRoot: string;
 }
 
@@ -98,8 +89,8 @@ export interface AgentBuildContext {
 
 export interface AssembleOptions {
   workspaceRoot: string;
-  editor: any;
-  shell?: any;
+  editor: Editor;
+  shell?: Shell;
   mcpServers: MCPServer[];
   extraPromptVars?: Record<string, string>;
 }

@@ -132,13 +132,37 @@ async function repl() {
   });
 
   process.on("SIGINT", async () => {
-    console.log("\n正在关闭...");
+    console.log("\n👋 再见！");
     await runtime.shutdown();
     rl.close();
     process.exit(0);
   });
 
-  console.log("DeepAgent REPL 已启动。输入 / 查看命令，Tab 补全。");
+  // ── 辅助：打印命令帮助 ──
+  function printCommands(sandbox: boolean) {
+    const status = sandbox ? "🏖️  沙盒模式" : "🏠 常规模式";
+    console.log(`\n  ${status}`);
+    console.log("  ═══════════════════════════════════════");
+    for (const cmd of getCommands(sandbox)) {
+      const names = [cmd.name, ...(cmd.aliases ?? [])].join(", ");
+      console.log(`  ${names.padEnd(26)} ${cmd.desc}`);
+    }
+    console.log("  ═══════════════════════════════════════");
+    console.log("");
+  }
+
+  console.log("");
+  console.log("  ╔══════════════════════════════════════════╗");
+  console.log("  ║  🤖  DeepAgent  v1.0                    ║");
+  console.log("  ║  Multi-Agent Orchestration Framework    ║");
+  console.log("  ║  powered by OpenAI Agents SDK           ║");
+  console.log("  ╚══════════════════════════════════════════╝");
+  console.log("  Tab 补全  |  / 重新显示命令  |  直接对话即可");
+  console.log("");
+
+  // 首次启动自动显示命令帮助
+  printCommands(inSandbox);
+
   rl.prompt();
 
   for await (const line of rl) {
@@ -147,12 +171,7 @@ async function repl() {
 
     // ── REPL 元命令 ──
     if (input === "/" || input === "/help") {
-      console.log("");
-      for (const cmd of getCommands(inSandbox)) {
-        const names = [cmd.name, ...(cmd.aliases ?? [])].join(", ");
-        console.log(`  ${names.padEnd(24)} ${cmd.desc}`);
-      }
-      console.log("");
+      printCommands(inSandbox);
       rl.prompt();
       continue;
     }
@@ -170,8 +189,8 @@ async function repl() {
       await runtime.enterSandbox(label);
       ctx = buildRealContext({ workspaceRoot: runtime.sandboxPath! });
       inSandbox = true;
-      console.log(`[沙盒模式] ${runtime.sandboxPath}`);
-      console.log("  所有文件操作和 shell 命令在此目录内执行。");
+      printCommands(true);
+      console.log(`  📂 ${runtime.sandboxPath}`);
       rl.prompt();
       continue;
     }
@@ -181,7 +200,7 @@ async function repl() {
       await runtime.exitSandbox();
       ctx = buildRealContext();
       inSandbox = false;
-      console.log("[已退出沙盒，变更已丢弃]");
+      printCommands(false);
       rl.prompt();
       continue;
     }

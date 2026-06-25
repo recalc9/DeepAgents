@@ -4,7 +4,8 @@
   "description": "基于 OpenAI Agents SDK 的多 Agent 编排框架，使用 DeepSeek 作为底层 LLM，采用 AgentHarness 声明式运行时容器",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js"
@@ -21,7 +22,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^3.1.1"
   }
 }

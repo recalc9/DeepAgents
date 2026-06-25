@@ -9,6 +9,7 @@
 import type { Editor, ApplyPatchResult, EditorInvocationContext } from "@openai/agents";
 import { applyDiff } from "@openai/agents";
 import type { FileSystemService } from "./filesystem.js";
+import { formatError } from "./agent-helpers.js";
 
 export class EditorImpl implements Editor {
   constructor(private fs: FileSystemService) {}
@@ -25,8 +26,7 @@ export class EditorImpl implements Editor {
         output: `[OK] 已创建文件: ${operation.path} (${content.split("\n").length} 行)`,
       };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { status: "failed", output: `[ERROR] 创建文件失败: ${msg}` };
+      return { status: "failed", output: `[ERROR] 创建文件失败: ${formatError(err)}` };
     }
   }
 
@@ -44,8 +44,7 @@ export class EditorImpl implements Editor {
         : `已更新文件: ${targetPath}`;
       return { status: "completed", output: `[OK] ${action}` };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { status: "failed", output: `[ERROR] 更新文件失败: ${msg}` };
+      return { status: "failed", output: `[ERROR] 更新文件失败: ${formatError(err)}` };
     }
   }
 
@@ -57,8 +56,7 @@ export class EditorImpl implements Editor {
       await this.fs.deleteFile(operation.path);
       return { status: "completed", output: `[OK] 已删除文件: ${operation.path}` };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { status: "failed", output: `[ERROR] 删除文件失败: ${msg}` };
+      return { status: "failed", output: `[ERROR] 删除文件失败: ${formatError(err)}` };
     }
   }
 }

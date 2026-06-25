@@ -10,6 +10,21 @@ export function getAppContext(runContext: RunContext): AppContext {
   return runContext.context as AppContext;
 }
 
+/** 轻量级 JSON path 查询（供测试和 data.tool.ts 共用） */
+export function queryJson(obj: unknown, path: string): unknown {
+  const parts = path.replace(/^\$\.?/, "").split(/\.|\[|\]\.?|\]/).filter(Boolean);
+  let cur: any = obj;
+  for (const part of parts) {
+    if (cur == null) return undefined;
+    if (/^\d+$/.test(part)) {
+      cur = cur[parseInt(part, 10)];
+    } else {
+      cur = cur[part];
+    }
+  }
+  return cur;
+}
+
 /** 构建 prompt 模板变量对象 */
 export function buildPromptVars(
   ctx: AppContext,

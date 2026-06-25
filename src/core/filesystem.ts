@@ -8,6 +8,7 @@
  */
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { formatError } from "./agent-helpers.js";
 
 export class FileSystemService {
   private rootDir: string;

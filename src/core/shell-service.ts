@@ -5,7 +5,11 @@
  * 使用 child_process.exec，cwd 锁定沙盒，超时 + 输出截断保护。
  */
 import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { Shell, ShellAction, ShellResult, ShellOutputResult } from "@openai/agents";
+import { formatError } from "./agent-helpers.js";
+
+const execAsync = promisify(exec);
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_OUTPUT_BYTES = 50 * 1024;
@@ -28,10 +32,9 @@ export class ShellServiceImpl implements Shell {
           outcome: { type: "exit" as const, exitCode: 0 },
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         outputs.push({
           stdout: "",
-          stderr: msg,
+          stderr: formatError(err),
           outcome: { type: "exit" as const, exitCode: 1 },
         });
       }
@@ -40,23 +43,13 @@ export class ShellServiceImpl implements Shell {
     return { output: outputs, maxOutputLength: maxLen };
   }
 
-  private execOne(
-    command: string,
-    timeoutMs: number
-  ): Promise<{ stdout: string; stderr: string }> {
-    return new Promise((resolve, reject) => {
-      exec(
-        command,
-        { cwd: this.cwd, timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES },
-        (error, stdout, stderr) => {
-          if (error && !stdout && !stderr) {
-            reject(error);
-            return;
-          }
-          resolve({ stdout, stderr });
-        }
-      );
-    });
+  private async execOne(command: string, timeoutMs: number): Promise<{ stdout: string; stderr: string }> {
+    try {
+      const { stdout, stderr } = await execAsync(command, { cwd: this.cwd, timeout: timeoutMs, maxBuffer: MAX_OUTPUT_BYTES });
+      return { stdout, stderr };
+    } catch (err: any) {
+      return { stdout: (err as any)?.stdout ?? "", stderr: (err as any)?.stderr ?? formatError(err) };
+    }
   }
 
   private truncate(text: string, maxLen: number): string {

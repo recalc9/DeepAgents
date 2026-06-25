@@ -101,11 +101,12 @@ export async function fetchUrl(url: string): Promise<string> {
     const MAX_BYTES = 500 * 1024;
     const contentType = resp.headers.get("content-type") ?? "";
     const buf = await resp.arrayBuffer();
+    const totalBytes = buf.byteLength;
 
     let text: string;
-    if (Buffer.byteLength(buf) > MAX_BYTES) {
+    if (totalBytes > MAX_BYTES) {
       text = Buffer.from(buf.slice(0, MAX_BYTES)).toString("utf-8");
-      text += `\n\n[TRUNCATED ${Buffer.byteLength(buf) - MAX_BYTES} bytes]`;
+      text += `\n\n[TRUNCATED ${totalBytes - MAX_BYTES} bytes]`;
     } else {
       text = Buffer.from(buf).toString("utf-8");
     }

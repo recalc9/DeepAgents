@@ -1,150 +1,84 @@
-# DeepAgent
+# DeepAgent — 红蓝安全 Agent 平台
 
-基于 [OpenAI Agents SDK](https://github.com/openai/openai-agents-typescript) 的多 Agent 编排框架，使用 DeepSeek 作为底层 LLM。
-
-采用 **AgentHarness 声明式运行时容器**，支持嵌套 Agent 拓扑、沙盒隔离、MCP 集成和流式交互。
+基于 [OpenAI Agents SDK](https://github.com/openai/openai-agents-typescript) 的多 Agent 编排框架，使用 DeepSeek 作为底层 LLM。专为**红蓝安全作战**设计。
 
 ## 特性
 
-- **嵌套 Agent 拓扑**：Triage → Manager(.asTool) → Code/DB，层级清晰、职责分明
-- **声明式配置**：新增 Agent/工具/护栏只需修改 `src/config.ts`，不动框架代码
-- **Harness 运行时容器**：拓扑排序 → 自动连线 handoffs → 装配 Agent → 管理生命周期
-- **沙盒隔离**：Agent 文件操作和 Shell 命令圈在临时目录，退出即丢弃
-- **实时流式展示**：Agent 思考过程、工具调用、handoff 切换可见
-- **MCP 集成**：支持 stdio/HTTP/SSE 三种 MCP 服务器模式
-- **多层护栏**：SQL 白名单、工具审批、敏感信息检测
-- **动态 Prompt**：模板外置 `.md` 文件，修改即生效
+- **10 个安全 Agent**：Ops Commander / Mission Lead / Exploit Dev / Recon / Access / Traffic / Audit / Detect / Intel DB / Intel Cache
+- **40+ 安全专用工具**：nmap 扫描、DNS 枚举、msfvenom Payload、hashcat 破解、hydra 喷洒、nuclei 扫描、YARA/SIGMA 规则、IOC 查询、MITM 代理
+- **嵌套 Agent 拓扑**：Ops Commander → Mission Lead(.asTool) → Exploit/Intel DB，层级清晰
+- **声明式配置**：新增 Agent/工具/护栏只需修改 `src/config.ts`
+- **沙盒隔离**：所有利用代码和 Payload 生成在临时目录执行，退出即丢弃
+- **实时流式展示**：Agent 思考过程、工具调用可见
+- **多层护栏**：主动扫描审批、SQL 白名单、敏感信息检测
+- **94 条单元测试**：vitest，覆盖 Core / Tools / Harness 三层
 
 ## 快速开始
-
-### 环境要求
-
-- Node.js 18+
-- PostgreSQL（可选，SQL 功能需要）
-- DeepSeek API Key
-
-### 安装
 
 ```bash
 git clone https://github.com/recalc9/DeepAgents
 cd deepagent
 npm install
+cp .env.example .env  # 填入 DEEPSEEK_API_KEY
+npm run dev            # 启动作战指挥 REPL
 ```
-
-### 配置
-
-复制 `.env.example` 为 `.env` 并填入配置：
 
 ```bash
-# 必填
-DEEPSEEK_API_KEY=sk-your-key-here
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-v4-flash
-
-# PostgreSQL（可选，使用 SQL 功能时需要）
-PGHOST=localhost
-PGPORT=5432
-PGDATABASE=deepagent
-PGUSER=postgres
-PGPASSWORD=your-password
+npm test               # 94 条测试
 ```
 
-### 运行
-
-```bash
-npm run dev
-```
-
-## REPL 命令
-
-| 命令 | 说明 |
-|------|------|
-| `/` | 显示可用命令 |
-| `/sandbox [名称]` | 进入隔离沙盒模式 |
-| `/exit-sandbox` | 退出沙盒（变更丢弃） |
-| `/mcp` | MCP 服务器连接状态 |
-| `/mcp connect <name>` | 连接 MCP 服务器 |
-| `/mcp disconnect <name>` | 断开 MCP 服务器 |
-| `/exit` | 退出 REPL |
-
-Tab 键可自动补全命令。
-
-## 架构
+## Agent 拓扑
 
 ```
-src/
-├── harness/              # 框架引擎
-│   ├── types.ts           # 类型定义
-│   ├── assembler.ts       # 拓扑排序 + 自动连线
-│   ├── runtime.ts         # 运行时容器
-│   └── mcp-registry.ts    # MCP 服务器管理
-├── agents/                # Agent 工厂（纯函数）
-│   ├── factory.ts          # 通用 Agent 工厂
-│   └── manager.agent.ts    # Manager 工厂
-├── tools/                 # 工具定义
-│   ├── file.tool.ts        # 文件读写
-│   ├── db.tool.ts          # SQL 查询/执行
-│   ├── web.tool.ts         # 网页搜索/抓取
-│   ├── git.tool.ts         # Git 版本控制
-│   └── code-exec.tool.ts   # 代码执行（沙盒）
-├── core/                  # 基础设施
-├── prompts/               # Prompt 模板
-├── config.ts              # 声明式配置（单一事实来源）
-├── bootstrap.ts           # 启动入口
-└── index.ts               # REPL 入口
+Ops Commander (Triage) ── mission_lead (asTool) ──→ Mission Lead
+  │                                                   ├── Exploit Dev (Payload/Exp/Shell)
+  │                                                   └── Intel DB (威胁情报查询)
+  ├── handoff → Recon Agent       (侦查/扫描/OSINT)
+  ├── handoff → Access Agent      (凭证攻击/哈希破解)
+  ├── handoff → Traffic Agent     (MITM 代理/抓包)
+  ├── handoff → Audit Agent       (漏洞扫描/代码审计)
+  ├── handoff → Detect Agent      (YARA/SIGMA/IOC)
+  ├── handoff → Intel Cache       (TTPs/IOC 记忆)
+  └── handoff → General           (通用问答)
 ```
 
-### Agent 拓扑
-
-```
-Triage Agent
-  ├─ tools: [manager_dev]           ← Manager (.asTool)
-  │   (Manager 内部)
-  │   ├─ handoff → Code Agent       (编程/文件/Shell/SQL 只读)
-  │   └─ handoff → DB Agent         (SQL 读写/DDL)
-  ├─ handoff → General Agent        (通用问答)
-  └─ handoff → Search Agent         (搜索)
-```
-
-### 工具矩阵
+### 红队 (Offensive)
 
 | Agent | 工具 |
 |------|------|
-| Code | `file_read`, `apply_patch`, `sql_query`, `web_fetch`, `git` |
-| Code (沙盒) | + `shell`, + `run_code` |
-| DB | `sql_query`, `sql_execute` |
-| Search | `web_search`, `web_fetch` |
-| General | `file_read`, `web_fetch` |
-| Manager | 无（纯路由） |
-| Triage | `manager_dev` (asTool) |
+| **Exploit Dev** | `payload_gen`, `reverse_shell`, `exploit_search`, `privesc_check`, `shell`, `run_code` |
+| **Recon** | `port_scan`, `dns_enum`, `whois_lookup`, `ssl_inspect`, `subdomain_enum`, `web_search` |
+| **Access** | `hash_identify`, `wordlist_gen`, `hash_crack`, `pass_spray` |
+| **Traffic** | `proxy_start/stop/sessions/inspect/export/intercept/dashboard` |
+
+### 蓝队 (Defensive)
+
+| Agent | 工具 |
+|------|------|
+| **Audit** | `vuln_scan`, `dep_audit`, `secret_scan`, `lint_run`, `type_check`, `pr_review` |
+| **Detect** | `yara_scan`, `sigma_validate`, `ioc_check`, `web_search` |
+| **Intel DB** | `sql_query`, `sql_execute`, `json_query`, `csv_read` |
+
+### 指挥 (Command)
+
+| Agent | 暴露方式 | 职责 |
+|------|---------|------|
+| **Ops Commander** | 根 Agent | 顶层分发：攻击→mission_lead / 侦查→Recon / 防御→Audit/Detect |
+| **Mission Lead** | .asTool → Ops Commander | 红队任务编排：Exploit Dev ↔ Intel DB |
 
 ## 护栏
 
-| 护栏 | 层级 | 行为 |
-|------|------|------|
-| SQL 动词白名单 | Context 实现层 | 禁止 DROP/TRUNCATE |
-| sql_execute 审批 | 工具层 | 每次需 REPL 人工确认 |
-| apply_patch delete 审批 | 工具层 | 删除文件需确认 |
-| 敏感信息检测 | Agent 输出 | 阻断含 API Key/Token 的输出 |
+| 护栏 | 行为 |
+|------|------|
+| 主动扫描审批 | port_scan / vuln_scan / pass_spray 需人工确认 |
+| Payload 审批 | payload_gen / hash_crack 需确认 |
+| SQL 白名单 | 禁止 DROP/TRUNCATE |
+| 敏感信息检测 | 阻断 API Key / Token / 私钥输出 |
+| 沙盒隔离 | Exploit 代码在临时目录执行 |
 
 ## 扩展
 
-新增 Agent 只需在 `src/config.ts` 中加几行配置：
-
-```ts
-{
-  name: "websearch",
-  factory: createAgent,       // 通用工厂
-  promptKey: "websearch",     // → src/prompts/websearch.prompt.md
-  description: "网页搜索专家",
-  handoffToParents: ["triage"],
-  tools: ["web_search", "web_fetch"],
-  guardrails: ["secrets"],
-  rootHandoff: true,
-}
-```
-
-Assembler 自动处理拓扑排序、handoff 连线、工具注入和护栏绑定。
+新增安全 Agent 只需在 `src/config.ts` 加几行配置，Assembler 自动处理拓扑排序和连线。
 
 ## 许可证
 
