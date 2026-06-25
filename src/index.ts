@@ -23,14 +23,16 @@ interface RepoCommand {
 }
 
 function getCommands(inSandbox: boolean): RepoCommand[] {
+  const status = inSandbox ? " (沙盒内不可用)" : "";
   return [
     { name: "/help",     aliases: ["/"],  desc: "显示可用命令" },
-    { name: "/exit",     aliases: ["exit", "/quit", "quit"], desc: "退出 REPL" },
-    { name: "/sandbox",  desc: "进入隔离沙盒模式", normalOnly: true },
+    { name: "/agents",   desc: "显示 Agent 拓扑" },
+    { name: "/sandbox",  desc: "进入隔离沙盒模式 (Payload/Exp 安全执行)", normalOnly: true },
     { name: "/exit-sandbox", desc: "退出沙盒（变更丢弃）", sandboxOnly: true },
     { name: "/mcp",      aliases: ["/mcp list"], desc: "MCP 服务器状态" },
     { name: "/mcp connect", desc: "连接 MCP 服务器 [/mcp connect <name>]" },
     { name: "/mcp disconnect", desc: "断开 MCP 服务器 [/mcp disconnect <name>]" },
+    { name: "/exit",     aliases: ["exit", "/quit", "quit"], desc: "退出 DeepAgent" },
   ].filter(c => {
     if (inSandbox && c.normalOnly) return false;
     if (!inSandbox && c.sandboxOnly) return false;
@@ -154,10 +156,11 @@ async function repl() {
   console.log("");
   console.log("  ╔══════════════════════════════════════════╗");
   console.log("  ║  🤖  DeepAgent  v1.0                    ║");
-  console.log("  ║  Multi-Agent Orchestration Framework    ║");
+  console.log("  ║  Red/Blue Security Agent Platform       ║");
   console.log("  ║  powered by OpenAI Agents SDK           ║");
   console.log("  ╚══════════════════════════════════════════╝");
-  console.log("  Tab 补全  |  / 重新显示命令  |  直接对话即可");
+  console.log("  ⚠  仅限授权安全测试与研究使用");
+  console.log("  / 查看命令  |  /agents 查看拓扑  |  Tab 补全");
   console.log("");
 
   // 首次启动自动显示命令帮助
@@ -172,6 +175,34 @@ async function repl() {
     // ── REPL 元命令 ──
     if (input === "/" || input === "/help") {
       printCommands(inSandbox);
+      rl.prompt();
+      continue;
+    }
+
+    if (input === "/agents") {
+      console.log("");
+      console.log("  🔴 红队 (Offensive)");
+      console.log("  ─────────────────────────────────────────────");
+      console.log("  recon      侦查专家   端口扫描/DNS/WHOIS/子域名");
+      console.log("  access     凭证专家   哈希破解/词表/密码喷洒");
+      console.log("  traffic    流量专家   MITM 代理/抓包/HAR 导出");
+      console.log("  exploit    利用专家   Payload/Exp/提权/Shell");
+      console.log("");
+      console.log("  🔵 蓝队 (Defensive)");
+      console.log("  ─────────────────────────────────────────────");
+      console.log("  audit      审计专家   漏洞扫描/依赖审计/密钥检测");
+      console.log("  detect     检测专家   YARA/SIGMA/IOC 查询");
+      console.log("  intel-db   情报数据库  SQL 查询/威胁情报存储");
+      console.log("");
+      console.log("  ⚪ 指挥 (Command)");
+      console.log("  ─────────────────────────────────────────────");
+      console.log("  triage     作战指挥官 顶层任务分发");
+      console.log("  mission    任务指挥官 红队任务编排 (asTool)");
+      console.log("  intel-cache 情报缓存   TTPs/IOC 跨会话记忆");
+      console.log("  general    通用问答   非安全类问题");
+      console.log("");
+      console.log("  提示: 直接描述任务，Ops Commander 自动路由到对应专家。");
+      console.log("");
       rl.prompt();
       continue;
     }
