@@ -19,7 +19,10 @@ export interface BaseContext {
 export interface AppContext extends BaseContext {
     readFile:(filePath: string) => Promise<string>;
     writeFile:(filePath: string, content: string) => Promise<void>;
+    /** 只读 SQL 查询（仅允许 SELECT） */
     queryDB:<T>(sql: string) => Promise<T[]>;
+    /** 写入/DDL SQL（INSERT/UPDATE/DELETE/CREATE/ALTER/DROP/TRUNCATE） */
+    executeSQL:(sql: string) => Promise<{ rowCount: number }>;
     webSearch:(keyword: string) => Promise<string[]>;
 }
 

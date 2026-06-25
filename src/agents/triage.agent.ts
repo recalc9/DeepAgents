@@ -1,39 +1,45 @@
-import {Agent} from "@openai/agents";
+import {Agent, handoff} from "@openai/agents";
 import {container} from "../core/container.js";
 import type {AppContext} from "../core/agent-context.js"
-import {asHandoff} from "../core/handoff-helper.js"
+import {PromptResolver} from "../core/prompt-resolver.js";
 import {createCodeAgent,createDBAgent,createGeneralAgent,createSearchAgent} from "../agents/index.js";
 
-export function createTriageAgent(): Agent {
+export function createTriageAgent(): Agent<AppContext, "text"> {
   const model = container.getDeepSeekModel();
-  
-  const code = createCodeAgent();
-  const db = createDBAgent();
-  const general = createGeneralAgent();
-  const search = createSearchAgent();
 
-  return Agent.create({
+  // 创建 PromptResolver 并下发给所有子 Agent
+  const resolver = new PromptResolver();
+  const code = createCodeAgent(resolver);
+  const db = createDBAgent(resolver);
+  const general = createGeneralAgent(resolver);
+  const search = createSearchAgent(resolver);
+
+  const handoffs = [
+    handoff(code),
+    handoff(db),
+    handoff(general),
+    handoff(search),
+  ];
+
+  const triage = new Agent<AppContext, "text">({
     name: "Triage Agent",
     model,
-    instructions: `你是智能任务分发器。根据用户意图精准路由到对应专家：
-
-        ## 路由规则
-        - 编程、代码审查、文件读写 → code_agent
-        - 数据库查询、SQL、数据分析 → db_agent  
-        - 实时信息、新闻、外部知识检索 → search_agent
-        
-        ## 兜底处理（General 能力）
-        如果以上都不匹配，你直接以友好、专业的方式回答用户的通用问题。
-        不要将通用闲聊路由给任何专家。
-
-        ## 注意事项
-        - 每次只路由到一个最匹配的专家
-        - 如果意图模糊，优先追问澄清而非猜测路由`,
-    handoffs: [
-      asHandoff(code),
-      asHandoff(db),
-      asHandoff(general),
-      asHandoff(search),
-    ]
+    instructions: async (runContext, _agent) => {
+      const ctx = runContext.context as AppContext;
+      return resolver.loadAndResolve("triage", {
+        user_id: ctx.userId ?? "unknown",
+        tool_list: "handoff (transfer_to_*)",
+        handoff_list: handoffs.map(h => h.agentName).join(", "),
+      });
+    },
+    handoffs,
   });
+
+  // 闭环：子 Agent 遇到超出能力范围的问题时，handoff 回分诊重新路由
+  code.handoffs = [handoff(triage)];
+  db.handoffs = [handoff(triage)];
+  search.handoffs = [handoff(triage)];
+  general.handoffs = [handoff(triage)];
+
+  return triage;
 }

@@ -17,9 +17,11 @@
     "@openai/agents": "^0.11.8",
     "dotenv": "^17.4.2",
     "openai": "^6.44.0",
+    "pg": "^8.13.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.0",
     "typescript": "^6.0.3"
   }
 }

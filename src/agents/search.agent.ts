@@ -1,13 +1,20 @@
 import {Agent} from "@openai/agents";
 import {container} from "../core/container.js";
 import type {AppContext} from "../core/agent-context.js"
+import type {PromptResolver} from "../core/prompt-resolver.js"
 
-export function createSearchAgent(): Agent<AppContext,"text"> {
+export function createSearchAgent(resolver: PromptResolver): Agent<AppContext,"text"> {
     const model = container.getDeepSeekModel();
 
     return new Agent<AppContext,"text">({
         name: "searchAgent",
-        instructions: `你负责解答搜索相关问题，提供搜索结果和相关信息，不懂退回分诊`,
+        handoffDescription: "搜索和信息检索专家，处理外部知识检索请求",
+        instructions: async (runContext, _agent) => {
+            const ctx = runContext.context as AppContext;
+            return resolver.loadAndResolve("search", {
+                user_id: ctx.userId ?? "unknown",
+            });
+        },
         handoffs: [],
         tools: [],
         model: model,
